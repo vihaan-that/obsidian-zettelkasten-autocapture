@@ -40,6 +40,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# ── Validate ────────────────────────────────────────────────
+if [[ "$HOUR" -lt 0 || "$HOUR" -gt 23 ]] 2>/dev/null; then
+    echo "ERROR: --hour must be 0-23 (got: $HOUR)"; exit 1
+fi
+if [[ "$MINUTE" -lt 0 || "$MINUTE" -gt 59 ]] 2>/dev/null; then
+    echo "ERROR: --minute must be 0-59 (got: $MINUTE)"; exit 1
+fi
+
 CRON_TAG="research-log-remind"
 LAUNCHD_LABEL="com.research-log.remind"
 LAUNCHD_PLIST="$HOME/Library/LaunchAgents/${LAUNCHD_LABEL}.plist"

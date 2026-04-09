@@ -120,7 +120,7 @@ fi
 printf "${GREEN}Entry type: ${LOG_TYPE}${RESET}\n"
 
 # ── Filename ────────────────────────────────────────────────
-SAFE_NAME="$(echo "$CONTRIBUTOR" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')"
+SAFE_NAME="$(echo "$CONTRIBUTOR" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')"
 FILENAME="${LOG_TYPE}-${DATE}-${SAFE_NAME}.md"
 DEST="${INBOX}/${FILENAME}"
 
@@ -131,7 +131,7 @@ case "$LOG_TYPE" in
 daily-log)
     if $USE_EDITOR; then
         # Copy template and open in editor
-        sed -e "s/{{date}}/$DATE/g" -e "s/{{contributor}}/$CONTRIBUTOR/g" \
+        sed -e "s|{{date}}|$DATE|g" -e "s|{{contributor}}|$CONTRIBUTOR|g" \
             "$TEMPLATES/daily-log.md" > "$DEST"
         "${EDITOR:-vim}" "$DEST"
     else
@@ -181,7 +181,7 @@ date: ${DATE}
 contributor: "${CONTRIBUTOR}"
 status: "in-progress"
 tags:
-${TAGS_YAML}---
+${TAGS_YAML:+${TAGS_YAML}}---
 
 # Daily Log — ${DATE}
 
@@ -208,7 +208,7 @@ EOF
 # ── FREESTYLE JOURNAL ──────────────────────────────────────
 journal)
     if $USE_EDITOR; then
-        sed -e "s/{{date}}/$DATE/g" -e "s/{{contributor}}/$CONTRIBUTOR/g" \
+        sed -e "s|{{date}}|$DATE|g" -e "s|{{contributor}}|$CONTRIBUTOR|g" \
             "$TEMPLATES/journal.md" > "$DEST"
         "${EDITOR:-vim}" "$DEST"
     else
@@ -236,7 +236,7 @@ type: journal
 date: ${DATE}
 contributor: "${CONTRIBUTOR}"
 tags:
-${TAGS_YAML}---
+${TAGS_YAML:+${TAGS_YAML}}---
 
 # Journal — ${DATE}
 
@@ -250,7 +250,7 @@ EOF
 # ── EXPERIMENT ──────────────────────────────────────────────
 experiment)
     if $USE_EDITOR; then
-        sed -e "s/{{date}}/$DATE/g" -e "s/{{contributor}}/$CONTRIBUTOR/g" \
+        sed -e "s|{{date}}|$DATE|g" -e "s|{{contributor}}|$CONTRIBUTOR|g" \
             "$TEMPLATES/experiment.md" > "$DEST"
         "${EDITOR:-vim}" "$DEST"
     else
@@ -294,7 +294,7 @@ date: ${DATE}
 contributor: "${CONTRIBUTOR}"
 status: "${EXP_STATUS}"
 tags:
-${TAGS_YAML}---
+${TAGS_YAML:+${TAGS_YAML}}---
 
 # Experiment — ${DATE}
 

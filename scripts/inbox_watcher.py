@@ -141,7 +141,8 @@ def classify_with_keywords(content: str) -> dict:
 
     # Try to extract contributor from frontmatter
     contributor = ""
-    contributor_match = re.search(r'contributor:\s*"?([^"\n]+)"?', content)
+    contributor_match = re.search(r'contributor:\s*"([^"]+)"', content) or \
+                       re.search(r'contributor:\s*(\S+)', content)
     if contributor_match:
         contributor = contributor_match.group(1).strip()
 

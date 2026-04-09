@@ -24,7 +24,6 @@ send_notify() {
 
     case "$OS" in
         Linux)
-            # cron doesn't have DISPLAY/DBUS — find the active session
             export DISPLAY="${DISPLAY:-:0}"
             export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}"
 
@@ -40,26 +39,33 @@ send_notify() {
 
 # ── Open terminal with log.sh ──────────────────────────────
 open_terminal() {
+    # Write a temp launcher script to avoid quoting issues
+    local launcher
+    launcher="$(mktemp /tmp/research-log-launcher.XXXXXX.sh)"
+    cat > "$launcher" <<LAUNCHER
+#!/usr/bin/env bash
+bash "$LOG_SCRIPT"
+echo
+echo "Press Enter to close."
+read
+LAUNCHER
+    chmod +x "$launcher"
+
     case "$OS" in
         Linux)
             export DISPLAY="${DISPLAY:-:0}"
             if command -v gnome-terminal &>/dev/null; then
-                gnome-terminal -- bash -c "'$LOG_SCRIPT'; echo; echo 'Press Enter to close.'; read"
+                gnome-terminal -- bash "$launcher"
             elif command -v xfce4-terminal &>/dev/null; then
-                xfce4-terminal -e "bash -c \"'$LOG_SCRIPT'; echo; echo 'Press Enter to close.'; read\""
+                xfce4-terminal -e "bash $launcher"
             elif command -v konsole &>/dev/null; then
-                konsole -e bash -c "'$LOG_SCRIPT'; echo; echo 'Press Enter to close.'; read"
+                konsole -e bash "$launcher"
             elif command -v x-terminal-emulator &>/dev/null; then
-                x-terminal-emulator -e bash -c "'$LOG_SCRIPT'; echo; echo 'Press Enter to close.'; read"
+                x-terminal-emulator -e bash "$launcher"
             fi
             ;;
         Darwin)
-            osascript -e "
-                tell application \"Terminal\"
-                    activate
-                    do script \"bash '$LOG_SCRIPT'\"
-                end tell
-            "
+            open -a Terminal "$launcher"
             ;;
     esac
 }

@@ -401,6 +401,119 @@ def architecture_diagram():
     print("  architecture.png")
 
 
+# ============================================================
+# DIAGRAM 5: Team Workflow (GitHub-centric)
+# ============================================================
+def team_workflow_diagram():
+    fig, ax = styled_fig((18, 12))
+
+    ax.text(50, 97, "TEAM WORKFLOW", ha="center", va="center",
+            fontsize=16, color=GREEN, fontweight="bold")
+    ax.text(50, 94, "GitHub as the central hub — team members push, organizer processes",
+            ha="center", va="center", fontsize=10, color=GRAY)
+
+    # ── Team Members (left side) ────────────────────────────
+    label(ax, 18, 88, "TEAM MEMBERS", fontsize=12, color=GREEN)
+    label(ax, 18, 85.5, "(each person's machine)", fontsize=8, color=GRAY)
+
+    # Member boxes
+    members = [
+        (3, 70, "Alice", GREEN),
+        (3, 55, "Bob", TEAL),
+        (3, 40, "Carol", PURPLE),
+    ]
+    for mx, my, mname, mcol in members:
+        box(ax, mx, my, 28, 11,
+            f"{mname}'s Machine\n\n"
+            f"1. rlog         (write daily entry)\n"
+            f"2. rlog-sync    (commit + push)\n\n"
+            f"One-time: bash scripts/setup-member.sh",
+            color="#0d1a0d", text_color=mcol, fontsize=7)
+
+    # ── GitHub (center) ─────────────────────────────────────
+    box(ax, 38, 50, 22, 16, "GitHub Repo\n\n"
+        "vault/\n"
+        "  00-Inbox/\n"
+        "  50-Daily-Logs/\n"
+        "  55-Journals/\n"
+        "  40-Experiments/\n"
+        "  ...\n\n"
+        "Single source of truth",
+        color="#1a1a1a", text_color=FG, fontsize=8)
+
+    label(ax, 49, 68, "github.com/...", fontsize=9, color=ACCENT)
+
+    # Arrows: members -> GitHub (push)
+    for _, my, _, mcol in members:
+        arrow(ax, 31, my + 5.5, 38, 58, color=mcol, lw=1.5, style="-|>", connectionstyle="arc3,rad=0.08")
+
+    label(ax, 35, 72, "git push", fontsize=8, color=GREEN)
+
+    # ── Admin PC (right side) ──────────────────────────────
+    label(ax, 78, 88, "ADMIN PC", fontsize=12, color=ORANGE)
+    label(ax, 78, 85.5, "(Vihaan's machine — runs evening job)", fontsize=8, color=GRAY)
+
+    # Organizer
+    box(ax, 65, 64, 28, 16, "Evening Organizer\n(cron @ 9pm)\n\n"
+        "1. git pull\n"
+        "2. Find unprocessed notes\n"
+        "3. LLM classify + summarize\n"
+        "4. Generate daily digest\n"
+        "5. Move to correct folders\n"
+        "6. git commit + push",
+        color="#2a1a00", text_color=ORANGE, fontsize=7)
+
+    # Arrow: GitHub -> Organizer (pull)
+    arrow(ax, 60, 60, 65, 70, color=ACCENT, lw=2, style="-|>")
+    label(ax, 60, 63, "git pull", fontsize=8, color=ACCENT)
+
+    # Arrow: Organizer -> GitHub (push)
+    arrow(ax, 65, 66, 60, 58, color=ORANGE, lw=2, style="-|>")
+    label(ax, 60, 60, "git push", fontsize=8, color=ORANGE)
+
+    # LLM box
+    box(ax, 72, 48, 18, 10, "LLM API\n\nClaude (Anthropic)\nor Gemini\n\nClassify, summarize,\ngenerate digest",
+        color="#1a0d2a", text_color=PURPLE, fontsize=7)
+    arrow(ax, 79, 64, 79, 58, color=PURPLE, lw=1.5, style="<->")
+
+    # ── Daily Digest ────────────────────────────────────────
+    box(ax, 38, 30, 22, 10, "Daily Digest\n\ndigest-2026-04-09.md\n\n"
+        "Key highlights\n"
+        "By contributor\n"
+        "Open blockers\n"
+        "Decisions made",
+        color="#0d1a2a", text_color=ACCENT, fontsize=7)
+
+    arrow(ax, 79, 48, 60, 35, color=ACCENT, lw=1.5, style="-|>")
+    label(ax, 70, 42, "generates", fontsize=7, color=GRAY)
+
+    # ── Timeline ────────────────────────────────────────────
+    label(ax, 50, 22, "DAILY TIMELINE", fontsize=11, color=GRAY)
+
+    # Timeline bar
+    ax.plot([10, 90], [17, 17], color=GRAY, lw=2, zorder=1)
+
+    times = [
+        (15, "9:00 AM\nTeam logs work\n(rlog)", GREEN),
+        (35, "Throughout day\nMore entries\n(rlog, hooks)", TEAL),
+        (55, "5:00 PM\nTeam syncs\n(rlog-sync)", ACCENT),
+        (75, "9:00 PM\nOrganizer runs\n(cron)", ORANGE),
+    ]
+    for tx, tlabel, tcol in times:
+        ax.plot(tx, 17, 'o', color=tcol, markersize=8, zorder=3)
+        label(ax, tx, 11, tlabel, fontsize=7, color=tcol)
+
+    # ── Setup note ──────────────────────────────────────────
+    box(ax, 15, 1, 70, 5, "Team member setup (one time):  git clone <repo>  &&  cd research-log  &&  bash scripts/setup-member.sh\n"
+        "Admin setup (one time):  bash scripts/setup-organizer.sh --hour 21 --provider anthropic",
+        color=DARK, text_color=FG, fontsize=7)
+
+    fig.savefig(os.path.join(OUT_DIR, "team-workflow.png"), dpi=DPI, bbox_inches="tight",
+                facecolor=BG, edgecolor="none", pad_inches=0.3)
+    plt.close(fig)
+    print("  team-workflow.png")
+
+
 # ── Generate all ────────────────────────────────────────────
 if __name__ == "__main__":
     print("Generating diagrams...")
@@ -408,4 +521,5 @@ if __name__ == "__main__":
     process_flow_diagram()
     watcher_pipeline_diagram()
     architecture_diagram()
+    team_workflow_diagram()
     print("Done.")

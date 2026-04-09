@@ -1,6 +1,13 @@
-# Watcher runtime files
+# API keys
+.env
+
+# Watcher / organizer runtime files
 vault/_Scripts/watcher.pid
 vault/_Scripts/watcher.log
+vault/_Scripts/organizer.log
+
+# Generated organizer wrapper
+scripts/run-organizer.sh
 
 # Contributor cache (local to each user)
 .contributor

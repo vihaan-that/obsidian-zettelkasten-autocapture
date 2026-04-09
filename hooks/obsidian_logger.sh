@@ -4,45 +4,31 @@
 # Receives session JSON on stdin from Claude Code.
 
 # ── Config ──────────────────────────────────────────────────
-# Set VAULT_PATH to your vault location, or it defaults to vault/ in the project root
 VAULT_PATH="${VAULT_PATH:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/vault}"
 INBOX="${VAULT_PATH}/00-Inbox"
 LOG="${VAULT_PATH}/_Scripts/watcher.log"
 
-# Contributor name — set in env or falls back to git user or system user
 CONTRIBUTOR="${LOG_CONTRIBUTOR:-$(git config user.name 2>/dev/null || whoami)}"
 
 mkdir -p "$INBOX"
 
-# ── Read stdin ───────────────────────────────────────────────
+# ── Read stdin and parse all fields at once ─────────────────
 INPUT="$(cat)"
 
-# ── Extract fields from session JSON ────────────────────────
-SESSION_ID="$(echo "$INPUT" | python3 -c "
-import sys, json
+eval "$(echo "$INPUT" | python3 -c "
+import sys, json, shlex
 try:
     d = json.load(sys.stdin)
-    print(d.get('session_id', d.get('sessionId', 'unknown')))
+    sid = d.get('session_id', d.get('sessionId', 'unknown'))
+    cwd = d.get('cwd', '')
+    tp = d.get('transcript_path', d.get('transcriptPath', ''))
+    print(f'SESSION_ID={shlex.quote(str(sid))}')
+    print(f'CWD={shlex.quote(str(cwd))}')
+    print(f'TRANSCRIPT_PATH={shlex.quote(str(tp))}')
 except Exception:
-    print('unknown')
-" 2>/dev/null)"
-
-CWD="$(echo "$INPUT" | python3 -c "
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    print(d.get('cwd', ''))
-except Exception:
-    print('')
-" 2>/dev/null)"
-
-TRANSCRIPT_PATH="$(echo "$INPUT" | python3 -c "
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    print(d.get('transcript_path', d.get('transcriptPath', '')))
-except Exception:
-    print('')
+    print(\"SESSION_ID='unknown'\")
+    print(\"CWD=''\")
+    print(\"TRANSCRIPT_PATH=''\")
 " 2>/dev/null)"
 
 # ── Git info ─────────────────────────────────────────────────
@@ -93,7 +79,7 @@ try:
         content = str(content).replace('\n', ' ')[:200]
         print(f'{i}. {content}')
 except Exception as e:
-    print(f'(could not parse transcript: {e})')
+    print('(transcript not available)')
 " "$TRANSCRIPT_PATH" 2>/dev/null)"
 fi
 

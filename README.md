@@ -8,13 +8,17 @@ A team daily research logging system built on Obsidian. Collects structured dail
 
 ## Table of Contents
 
-- [Quick Start](#quick-start)
+- [Quick Start — Team Members](#quick-start--team-members)
+- [Quick Start — Admin (Organizer)](#quick-start--admin-organizer)
+- [Team Workflow](#team-workflow)
 - [How It Works](#how-it-works)
 - [Data Flow](#data-flow)
 - [Process Flow — log.sh](#process-flow--logsh)
 - [Watcher Pipeline](#watcher-pipeline)
+- [Evening Organizer](#evening-organizer)
 - [Usage Guide](#usage-guide)
   - [Daily Logging (log.sh)](#daily-logging-logsh)
+  - [Syncing (sync.sh)](#syncing-syncsh)
   - [Auto-Capture Watcher](#auto-capture-watcher)
   - [Scheduled Reminders](#scheduled-reminders)
   - [Claude Code Hook](#claude-code-session-hook)
@@ -29,37 +33,103 @@ A team daily research logging system built on Obsidian. Collects structured dail
 
 ---
 
-## Quick Start
+## Quick Start — Team Members
+
+Three commands. No API keys, no dependencies, no config files.
 
 ```bash
-# Clone
-git clone https://github.com/vihaan-that/obsidian-zettelkasten-autocapture.git research-log
+git clone <repo-url> research-log
 cd research-log
-
-# Log your first entry — the script walks you through it
-bash scripts/log.sh
+bash scripts/setup-member.sh
 ```
 
-That's it. No dependencies, no config, no API keys. Just run the script.
+Setup asks your name, creates shell aliases, and optionally sets a daily reminder. Then your daily workflow is:
+
+```bash
+rlog              # write your daily log (interactive prompts)
+rlog-sync         # commit + push to the shared repo
+```
+
+That's it. Everything else happens on the admin PC.
+
+---
+
+## Quick Start — Admin (Organizer)
+
+Run this once on the machine that will process everyone's notes nightly:
+
+```bash
+# Install the anthropic SDK
+pip install anthropic
+
+# Set your API key
+export ANTHROPIC_API_KEY="sk-..."
+# Or create a .env file:
+echo "ANTHROPIC_API_KEY=sk-..." > .env
+
+# Install the evening cron job (default: 9pm daily)
+bash scripts/setup-organizer.sh
+
+# Or use Gemini instead:
+bash scripts/setup-organizer.sh --provider gemini
+```
+
+The organizer pulls all team entries from GitHub every evening, classifies and summarizes them with an LLM, generates a daily digest, and pushes the organized notes back.
+
+---
+
+## Team Workflow
+
+![Team Workflow](docs/team-workflow.png)
+
+GitHub is the central hub. Team members push raw entries, the admin's organizer pulls, processes, and pushes back.
+
+```
+ TEAM MEMBERS                    GITHUB                     ADMIN PC
+ ────────────                    ──────                     ────────
+                                    │
+ Alice: rlog ──► rlog-sync ──► git push ◄───── git pull ◄── cron @ 9pm
+ Bob:   rlog ──► rlog-sync ──► git push         │
+ Carol: rlog ──► rlog-sync ──► git push    organizer.py
+                                    │        │ classify + summarize
+                                    │        │ generate digest
+                                    │        │ move to folders
+                                git push ◄───┘
+                                    │
+                              organized vault
+                              + daily digest
+```
+
+### Daily timeline
+
+| Time | What happens | Who |
+|------|-------------|-----|
+| Throughout the day | Team members write entries with `rlog` | Everyone |
+| End of day | Team members sync with `rlog-sync` | Everyone |
+| 9:00 PM (configurable) | Organizer pulls, processes, pushes | Cron on admin PC |
+| Next morning | Team pulls latest to see organized notes + digest | Everyone (`rlog-sync --pull`) |
 
 ---
 
 ## How It Works
 
-There are five capture sources, one staging area, one processing daemon, and seven destination folders. Everything is markdown with YAML frontmatter, stored in a flat folder layout that's trivially queryable.
+Five capture sources, one staging area, one LLM organizer, seven destination folders. Everything is markdown with YAML frontmatter, stored flat.
 
 ```
-Team member runs log.sh  ──────────┐
+Team member runs rlog ─────────────┐
 Claude Code session ──(Stop hook)──┤
-Git commit ──(post-commit hook)────┤──► 00-Inbox/ ──(watcher)──► classified & filed
-Browser export ────────────────────┤                              + one question asked
-Manual drop (papers, research)─────┘
+Git commit ──(post-commit hook)────┤──► 00-Inbox/ ──(organizer)──► classified & filed
+Browser export ────────────────────┤        │                       + daily digest
+Manual drop (papers, research)─────┘        ▼
+                                       GitHub repo
+                                    (central knowledge base)
 ```
 
-- **Humans write entries** via `log.sh` (interactive CLI with prompts) or drop files manually
+- **Team members write entries** via `rlog` (interactive CLI) and push with `rlog-sync`
 - **Hooks capture automatically** from Claude Code sessions and git commits
-- **The inbox watcher** classifies each note (AI or keyword fallback), injects YAML frontmatter, moves it to the right folder, and pops a desktop notification with one targeted question
-- **Cron/launchd** sends a daily reminder to log
+- **The evening organizer** (cron on admin PC) pulls from GitHub, classifies via LLM (Claude or Gemini), generates a team digest, and pushes organized notes back
+- **The inbox watcher** (optional, local) can also process notes in real-time if you prefer
+- **Cron/launchd** sends daily reminders to log
 
 ---
 
@@ -136,6 +206,86 @@ The `inbox_watcher.py` daemon — how notes are automatically processed after th
 
 ---
 
+## Evening Organizer
+
+The `organizer.py` script runs nightly on the admin PC via cron. It's the thing that turns raw team entries into an organized knowledge base.
+
+### What it does
+
+| Step | Action |
+|------|--------|
+| 1. `git pull` | Fetch all team entries pushed during the day |
+| 2. Find unprocessed | Scan `00-Inbox/` and find notes with empty summaries |
+| 3. LLM classify | Send each note to Claude (or Gemini) for type, summary, tags |
+| 4. Update frontmatter | Inject/update YAML frontmatter, preserve existing fields |
+| 5. Move to folders | Route each note to the correct destination folder |
+| 6. Generate digest | Create a daily team digest with highlights, per-contributor summaries, blockers |
+| 7. `git commit + push` | Push organized notes + digest back to the repo |
+
+### Running manually
+
+```bash
+# Default (uses Anthropic Claude)
+python3 scripts/organizer.py
+
+# Preview without changes
+python3 scripts/organizer.py --dry-run
+
+# Organize but don't push
+python3 scripts/organizer.py --no-push
+
+# Use Gemini instead
+python3 scripts/organizer.py --provider gemini
+```
+
+### Installing the cron job
+
+```bash
+# Default: 9pm daily, Anthropic
+bash scripts/setup-organizer.sh
+
+# Custom time and provider
+bash scripts/setup-organizer.sh --hour 21 --minute 30 --provider gemini
+
+# Remove
+bash scripts/setup-organizer.sh --remove
+```
+
+The setup script generates a wrapper (`run-organizer.sh`) that handles conda activation and loading API keys from `.env`.
+
+### API key setup
+
+Create a `.env` file in the project root (gitignored):
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+# or
+GEMINI_API_KEY=AIza...
+```
+
+Or export in your shell profile.
+
+### Daily digest
+
+The organizer generates `vault/50-Daily-Logs/digest-YYYY-MM-DD.md` each evening:
+
+```markdown
+## Key Highlights
+- 3-5 bullet points of the most important things across all entries
+
+## By Contributor
+- Alice: worked on X, decided Y
+- Bob: explored Z, blocked on W
+
+## Open Questions & Blockers
+- Items needing attention
+
+## Decisions Made
+- Pivots and choices noted today
+```
+
+---
+
 ## Usage Guide
 
 ### Daily Logging (log.sh)
@@ -196,9 +346,28 @@ Status
 
 ---
 
+### Syncing (sync.sh)
+
+Push your entries to the shared repo.
+
+```bash
+# Commit local entries and push
+rlog-sync
+
+# Or manually:
+bash scripts/sync.sh
+
+# Pull latest only (get organized notes + digests)
+bash scripts/sync.sh --pull
+```
+
+`sync.sh` does: `git pull --rebase` → stage `vault/` → commit with your name and date → push. Only vault files are committed — scripts and config are untouched.
+
+---
+
 ### Auto-Capture Watcher
 
-The background daemon that classifies and files notes automatically.
+Optional local daemon that classifies and files notes in real-time. Most teams won't need this — the evening organizer handles it.
 
 ```bash
 # Start (keyword classification — no API key needed)
@@ -423,12 +592,15 @@ Optional: install **Obsidian Git** for automatic vault backup to the repo.
 
 ## Environment Variables
 
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `VAULT_PATH` | Path to the vault directory | `./vault` (relative to project root) |
-| `GEMINI_API_KEY` | AI classification in the watcher (optional) | Keyword fallback if unset |
-| `LOG_CONTRIBUTOR` | Override contributor name in hooks | `git config user.name` or `whoami` |
-| `EDITOR` | Editor for `--editor` mode in log.sh | `vim` |
+| Variable | Purpose | Default | Who needs it |
+|----------|---------|---------|-------------|
+| `ANTHROPIC_API_KEY` | LLM classification in the organizer | required for organizer | Admin only |
+| `GEMINI_API_KEY` | Alternative LLM provider | required if `--provider gemini` | Admin only |
+| `VAULT_PATH` | Path to the vault directory | `./vault` (relative to project root) | Optional |
+| `LOG_CONTRIBUTOR` | Override contributor name in hooks | `git config user.name` or `whoami` | Optional |
+| `EDITOR` | Editor for `--editor` mode in log.sh | `vim` | Optional |
+
+API keys can be set in a `.env` file at the project root (gitignored) or exported in your shell.
 
 ---
 
@@ -465,34 +637,40 @@ The vault is designed to be machine-readable from day one:
 
 ```
 research-log/
-├── README.md                       ← this file
+├── README.md                        ← this file
 ├── .gitignore
+├── .env                             ← API keys (create this, gitignored)
 ├── docs/
-│   ├── architecture.png            ← system architecture diagram
-│   ├── data-flow.png               ← data flow diagram
-│   ├── process-flow.png            ← log.sh process flow
-│   ├── watcher-pipeline.png        ← watcher pipeline diagram
-│   └── gen_diagrams.py             ← script that generates the PNGs
+│   ├── architecture.png             ← system architecture diagram
+│   ├── data-flow.png                ← data flow diagram
+│   ├── process-flow.png             ← log.sh process flow
+│   ├── watcher-pipeline.png         ← watcher pipeline diagram
+│   ├── team-workflow.png            ← team GitHub workflow diagram
+│   └── gen_diagrams.py              ← script that generates the PNGs
 ├── scripts/
-│   ├── log.sh                      ← interactive daily log CLI
-│   ├── inbox_watcher.py            ← watchdog daemon (classify + file)
-│   ├── start_watcher.sh            ← start watcher as background daemon
-│   ├── stop_watcher.sh             ← stop watcher
-│   ├── setup-cron.sh               ← install daily reminder (cron/launchd)
-│   ├── remind.sh                   ← reminder notification script
-│   └── git-post-commit-hook.sh     ← per-repo git hook
+│   ├── log.sh                       ← interactive daily log CLI
+│   ├── sync.sh                      ← commit + push entries to GitHub
+│   ├── setup-member.sh              ← one-time team member setup
+│   ├── organizer.py                 ← evening LLM organizer (admin PC)
+│   ├── setup-organizer.sh           ← install organizer cron/launchd
+│   ├── inbox_watcher.py             ← real-time watchdog daemon (optional)
+│   ├── start_watcher.sh             ← start watcher as background daemon
+│   ├── stop_watcher.sh              ← stop watcher
+│   ├── setup-cron.sh                ← install daily reminder (cron/launchd)
+│   ├── remind.sh                    ← reminder notification script
+│   └── git-post-commit-hook.sh      ← per-repo git hook
 ├── hooks/
-│   └── obsidian_logger.sh          ← Claude Code Stop hook
+│   └── obsidian_logger.sh           ← Claude Code Stop hook
 ├── dashboard/
-│   ├── Home.md                     ← Dataview dashboard
-│   └── SETUP.md                    ← setup guide
-└── vault/                          ← open this as your Obsidian vault
+│   ├── Home.md                      ← Dataview dashboard
+│   └── SETUP.md                     ← setup guide
+└── vault/                           ← open this as your Obsidian vault
     ├── 00-Inbox/
     ├── 10-LLM-Chats/
     ├── 20-Code-Sessions/
     ├── 30-Research/
     ├── 40-Experiments/
-    ├── 50-Daily-Logs/
+    ├── 50-Daily-Logs/               ← daily logs + team digests
     ├── 55-Journals/
     ├── 60-Permanent/
     ├── _Dashboard/
