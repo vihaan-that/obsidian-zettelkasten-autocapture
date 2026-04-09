@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# Claude Code Stop hook — logs each session to the Obsidian vault inbox.
+# Claude Code Stop hook — logs each session to the research log vault inbox.
 # Registered under hooks.Stop in ~/.claude/settings.json
 # Receives session JSON on stdin from Claude Code.
 
-VAULT_PATH="/home/vihaan/Documents/Work"
+# ── Config ──────────────────────────────────────────────────
+# Set VAULT_PATH to your vault location, or it defaults to vault/ in the project root
+VAULT_PATH="${VAULT_PATH:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/vault}"
 INBOX="${VAULT_PATH}/00-Inbox"
 LOG="${VAULT_PATH}/_Scripts/watcher.log"
+
+# Contributor name — set in env or falls back to git user or system user
+CONTRIBUTOR="${LOG_CONTRIBUTOR:-$(git config user.name 2>/dev/null || whoami)}"
 
 mkdir -p "$INBOX"
 
@@ -67,7 +72,6 @@ try:
         data = json.load(f)
 
     messages = []
-    # Handle both array-of-messages and {messages: [...]} shapes
     if isinstance(data, list):
         messages = data
     elif isinstance(data, dict):
@@ -81,7 +85,6 @@ try:
     for i, m in enumerate(user_msgs, 1):
         content = m.get('content', '')
         if isinstance(content, list):
-            # multi-part content blocks
             text_parts = [
                 b.get('text', '') for b in content
                 if isinstance(b, dict) and b.get('type') == 'text'
@@ -100,7 +103,6 @@ SESSION_SHORT="${SESSION_ID:0:8}"
 FILENAME="cc-${DATE}-${SESSION_SHORT}.md"
 DEST="${INBOX}/${FILENAME}"
 
-# Format changed files as a markdown list
 if [ "$CHANGED_FILES" != "none detected" ]; then
     FILES_MD="$(echo "$CHANGED_FILES" | sed 's/^/- /')"
 else
@@ -111,6 +113,7 @@ cat > "$DEST" <<MARKDOWN
 ---
 type: code-session
 date: ${DATE}
+contributor: "${CONTRIBUTOR}"
 repo: ${REPO}
 branch: ${BRANCH}
 session_id: ${SESSION_SHORT}
@@ -131,4 +134,4 @@ ${FILES_MD}
 ## My take
 MARKDOWN
 
-echo "$(date '+%Y-%m-%d %H:%M:%S')  [obsidian_logger] wrote ${FILENAME}" >> "$LOG"
+echo "$(date '+%Y-%m-%d %H:%M:%S')  [obsidian_logger] wrote ${FILENAME} (${CONTRIBUTOR})" >> "$LOG"

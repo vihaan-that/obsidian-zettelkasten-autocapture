@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Stop the Obsidian inbox watcher daemon.
+# Stop the inbox watcher daemon.
 
-VAULT_PATH="/home/vihaan/Documents/Work"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+VAULT_PATH="${VAULT_PATH:-$PROJECT_ROOT/vault}"
 PID_FILE="${VAULT_PATH}/_Scripts/watcher.pid"
 
 if [ ! -f "$PID_FILE" ]; then

@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # ============================================================
-# Obsidian git post-commit hook template
+# Research Log git post-commit hook
 # ============================================================
 # Install into any repo:
-#   cp /home/vihaan/Documents/Work/_Scripts/git-post-commit-hook.sh \
-#      /path/to/your/repo/.git/hooks/post-commit
-#   chmod +x /path/to/your/repo/.git/hooks/post-commit
+#   cp scripts/git-post-commit-hook.sh /path/to/repo/.git/hooks/post-commit
+#   chmod +x /path/to/repo/.git/hooks/post-commit
 # ============================================================
 
-VAULT_PATH="/home/vihaan/Documents/Work"
+# ── Config ──────────────────────────────────────────────────
+# Set VAULT_PATH in your environment, or update this default
+VAULT_PATH="${VAULT_PATH:-$HOME/Documents/work/research-log/vault}"
 INBOX="${VAULT_PATH}/00-Inbox"
+
+# Contributor — git author name for this commit
+CONTRIBUTOR="$(git log -1 --pretty=%an 2>/dev/null || whoami)"
 
 mkdir -p "$INBOX"
 
@@ -33,6 +37,7 @@ cat > "$DEST" <<MARKDOWN
 ---
 type: code-session
 date: ${DATE}
+contributor: "${CONTRIBUTOR}"
 repo: ${REPO}
 branch: ${BRANCH}
 ---
@@ -46,4 +51,4 @@ ${FILES_MD}
 ## My take
 MARKDOWN
 
-echo "Obsidian: logged commit to ${FILENAME}"
+echo "Research Log: logged commit by ${CONTRIBUTOR} to ${FILENAME}"

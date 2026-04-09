@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # ============================================================
-# Start the Obsidian inbox watcher as a background daemon.
+# Start the inbox watcher as a background daemon.
 # Run once after login — add to your shell profile or autostart.
 # ============================================================
 
-VAULT_PATH="/home/vihaan/Documents/Work"
-SCRIPT="${VAULT_PATH}/_Scripts/inbox_watcher.py"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+VAULT_PATH="${VAULT_PATH:-$PROJECT_ROOT/vault}"
+SCRIPT="${SCRIPT_DIR}/inbox_watcher.py"
 PID_FILE="${VAULT_PATH}/_Scripts/watcher.pid"
 LOG_FILE="${VAULT_PATH}/_Scripts/watcher.log"
 GEMINI_KEY="${GEMINI_API_KEY:-}"
+
+mkdir -p "${VAULT_PATH}/_Scripts"
 
 # ── Check for existing running watcher ───────────────────────
 if [ -f "$PID_FILE" ]; then
@@ -42,6 +46,7 @@ fi
 
 # ── Launch ────────────────────────────────────────────────────
 echo "Starting inbox watcher..."
+export VAULT_PATH
 nohup python3 "$SCRIPT" >> "$LOG_FILE" 2>&1 &
 WPD=$!
 echo "$WPD" > "$PID_FILE"

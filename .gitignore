@@ -1,0 +1,13 @@
+# Watcher runtime files
+vault/_Scripts/watcher.pid
+vault/_Scripts/watcher.log
+
+# Contributor cache (local to each user)
+.contributor
+
+# Obsidian internals
+vault/.obsidian/
+
+# OS
+.DS_Store
+Thumbs.db
