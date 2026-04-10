@@ -162,6 +162,17 @@ class CopilotImporter(ChatImporter):
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
             tables = [row[0] for row in cursor.fetchall()]
 
+            if not tables:
+                # Database is empty or malformed
+                conn.close()
+                return {
+                    'source_id': os.path.splitext(filename)[0],
+                    'messages': [],
+                    'date': date,
+                    'tool': self.tool_name,
+                    'metadata': {}
+                }
+
             # Look for messages/conversations table
             message_table = None
             for table in ['messages', 'conversations', 'chats']:
@@ -186,14 +197,14 @@ class CopilotImporter(ChatImporter):
             conn.close()
 
         except Exception as e:
-            # If parsing fails, return empty messages
+            # If parsing fails, return empty messages (don't create garbage)
             pass
 
         source_id = os.path.splitext(filename)[0]
 
         return {
             'source_id': source_id,
-            'messages': messages or [ChatMessage('unknown', 'Unable to parse database')],
+            'messages': messages,  # Empty if parsing failed
             'date': date,
             'tool': self.tool_name,
             'metadata': {}

@@ -8,6 +8,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Get selected text from content script
   chrome.tabs.sendMessage(tab.id, { action: 'getSelectedText' }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.warn('Content script error:', chrome.runtime.lastError);
+      document.getElementById('selectedTextPreview').textContent = '(unable to access selected text)';
+      return;
+    }
     if (response && response.selectedText) {
       const preview = response.selectedText.substring(0, 200);
       document.getElementById('selectedTextPreview').textContent = preview + (preview.length < response.selectedText.length ? '...' : '');
