@@ -18,3 +18,8 @@ vault/.obsidian/
 # OS
 .DS_Store
 Thumbs.db
+
+# Browser extension
+extension/dist/
+extension/node_modules/
+extension/.env
