@@ -50,6 +50,7 @@ DEST_FOLDERS = {
     "llm-chat":      VAULT_PATH / "10-LLM-Chats",
     "code-session":  VAULT_PATH / "20-Code-Sessions",
     "research":      VAULT_PATH / "30-Research",
+    "web-clip":      VAULT_PATH / "15-Web-Clips",
     "general":       VAULT_PATH / "60-Permanent",
 }
 
@@ -152,7 +153,7 @@ def llm_classify_anthropic(content: str) -> dict:
     prompt = (
         "You are a research log organizer. Classify this note and return ONLY raw JSON.\n\n"
         "Schema:\n"
-        '{"type": "<daily-log|journal|experiment|llm-chat|code-session|research|general>",\n'
+        '{"type": "<daily-log|journal|experiment|llm-chat|code-session|research|web-clip|general>",\n'
         ' "summary": "<one line, max 15 words>",\n'
         ' "tags": ["<tag1>", "<tag2>", "<tag3>"],\n'
         ' "contributor": "<name if found, else empty string>"}\n\n'
@@ -183,7 +184,7 @@ def llm_classify_gemini(content: str) -> dict:
     prompt = (
         "You are a research log organizer. Classify this note and return ONLY raw JSON.\n\n"
         "Schema:\n"
-        '{"type": "<daily-log|journal|experiment|llm-chat|code-session|research|general>",\n'
+        '{"type": "<daily-log|journal|experiment|llm-chat|code-session|research|web-clip|general>",\n'
         ' "summary": "<one line, max 15 words>",\n'
         ' "tags": ["<tag1>", "<tag2>", "<tag3>"],\n'
         ' "contributor": "<name if found, else empty string>"}\n\n'
@@ -327,9 +328,9 @@ def process_note(path: Path, classify_fn, dry_run: bool = False) -> dict | None:
     meta = {"type": note_type, "date": date, "contributor": contributor, "summary": summary}
     if status:
         meta["status"] = status
-    # Preserve extra fields (repo, branch, session_id)
-    for k in ("repo", "branch", "session_id"):
-        if k in existing_fm:
+    # Preserve extra fields (repo, branch, session_id, tool, source_id, url)
+    for k in ("repo", "branch", "session_id", "tool", "source_id", "url"):
+        if k in existing_fm and existing_fm[k]:
             meta[k] = existing_fm[k]
     meta["tags"] = tags
 

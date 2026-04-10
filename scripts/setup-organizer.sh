@@ -25,23 +25,29 @@ HOUR=21
 MINUTE=0
 PROVIDER="anthropic"
 REMOVE=false
+ENABLE_IMPORTERS=false
+IMPORTER_INTERVAL="2h"
 PYTHON="${PYTHON:-python3}"
 
 # ── Parse args ──────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --hour)     HOUR="$2"; shift 2 ;;
-        --minute)   MINUTE="$2"; shift 2 ;;
-        --provider) PROVIDER="$2"; shift 2 ;;
-        --python)   PYTHON="$2"; shift 2 ;;
-        --remove)   REMOVE=true; shift ;;
+        --hour)              HOUR="$2"; shift 2 ;;
+        --minute)            MINUTE="$2"; shift 2 ;;
+        --provider)          PROVIDER="$2"; shift 2 ;;
+        --python)            PYTHON="$2"; shift 2 ;;
+        --enable-importers)  ENABLE_IMPORTERS=true; shift ;;
+        --importer-interval) IMPORTER_INTERVAL="$2"; shift 2 ;;
+        --remove)            REMOVE=true; shift ;;
         -h|--help)
-            echo "Usage: setup-organizer.sh [--hour H] [--minute M] [--provider anthropic|gemini] [--remove]"
-            echo "  --hour H       Hour in 24h format (default: 21)"
-            echo "  --minute M     Minute (default: 0)"
-            echo "  --provider P   LLM provider: anthropic or gemini (default: anthropic)"
-            echo "  --python PATH  Python binary (default: python3)"
-            echo "  --remove       Remove the scheduled organizer"
+            echo "Usage: setup-organizer.sh [--hour H] [--minute M] [--provider anthropic|gemini] [--enable-importers] [--importer-interval INTERVAL] [--remove]"
+            echo "  --hour H           Hour in 24h format (default: 21)"
+            echo "  --minute M         Minute (default: 0)"
+            echo "  --provider P       LLM provider: anthropic or gemini (default: anthropic)"
+            echo "  --enable-importers Install chat importers daemon"
+            echo "  --importer-interval INTERVAL Importer run frequency: 30m, 1h, 2h, 6h, 12h, 24h (default: 2h)"
+            echo "  --python PATH      Python binary (default: python3)"
+            echo "  --remove           Remove the scheduled organizer"
             exit 0 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
@@ -55,7 +61,7 @@ if [[ "$MINUTE" -lt 0 || "$MINUTE" -gt 59 ]] 2>/dev/null; then
     echo "ERROR: --minute must be 0-59 (got: $MINUTE)"; exit 1
 fi
 
-CRON_TAG="research-log-organizer"
+CRON_TAG_ORGANIZER="research-log-organizer"
 LAUNCHD_LABEL="com.research-log.organizer"
 LAUNCHD_PLIST="$HOME/Library/LaunchAgents/${LAUNCHD_LABEL}.plist"
 
@@ -87,28 +93,77 @@ $PYTHON "$ORGANIZER" --provider $PROVIDER 2>&1
 WRAP
 chmod +x "$WRAPPER"
 
+# ── Build the importers wrapper script ─
+IMPORTERS_SCRIPT="$SCRIPT_DIR/chat_importers.py"
+IMPORTERS_WRAPPER="$SCRIPT_DIR/run-importers.sh"
+if [ "$ENABLE_IMPORTERS" = true ]; then
+    cat > "$IMPORTERS_WRAPPER" <<WRAP
+#!/usr/bin/env bash
+# Auto-generated wrapper for the chat importers cron job.
+# Handles conda activation and environment setup.
+
+# Activate conda if available
+if [ -f "\$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+    source "\$HOME/miniconda3/etc/profile.d/conda.sh"
+    conda activate
+elif [ -f "\$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
+    source "\$HOME/anaconda3/etc/profile.d/conda.sh"
+    conda activate
+fi
+
+# Set API key from keyring or env file
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    set -a
+    source "$PROJECT_ROOT/.env"
+    set +a
+fi
+
+cd "$PROJECT_ROOT"
+$PYTHON "$IMPORTERS_SCRIPT" 2>&1
+WRAP
+    chmod +x "$IMPORTERS_WRAPPER"
+fi
+
 # ── Remove ──────────────────────────────────────────────────
 if $REMOVE; then
     case "$OS" in
         Linux)
-            if crontab -l 2>/dev/null | grep -q "$CRON_TAG"; then
-                crontab -l 2>/dev/null | grep -v "$CRON_TAG" | crontab -
-                echo "Removed cron job."
+            IMPORTER_TAG="research-log-importers"
+            CRON_TAG_ORGANIZER="research-log-organizer"
+
+            if crontab -l 2>/dev/null | grep -q "$CRON_TAG_ORGANIZER"; then
+                crontab -l 2>/dev/null | grep -v "$CRON_TAG_ORGANIZER" | crontab -
+                echo "Removed organizer cron job."
             else
-                echo "No cron job found."
+                echo "No organizer cron job found."
+            fi
+
+            if crontab -l 2>/dev/null | grep -q "$IMPORTER_TAG"; then
+                crontab -l 2>/dev/null | grep -v "$IMPORTER_TAG" | crontab -
+                echo "Removed importers cron job."
+            else
+                echo "No importers cron job found."
             fi
             ;;
         Darwin)
             if [[ -f "$LAUNCHD_PLIST" ]]; then
                 launchctl unload "$LAUNCHD_PLIST" 2>/dev/null || true
                 rm -f "$LAUNCHD_PLIST"
-                echo "Removed launchd agent."
+                echo "Removed organizer launchd agent."
             else
-                echo "No launchd agent found."
+                echo "No organizer launchd agent found."
+            fi
+
+            LAUNCHD_IMPORTERS_LABEL="com.research-log.importers"
+            LAUNCHD_IMPORTERS_PLIST="$HOME/Library/LaunchAgents/${LAUNCHD_IMPORTERS_LABEL}.plist"
+            if [[ -f "$LAUNCHD_IMPORTERS_PLIST" ]]; then
+                launchctl unload "$LAUNCHD_IMPORTERS_PLIST" 2>/dev/null || true
+                rm -f "$LAUNCHD_IMPORTERS_PLIST"
+                echo "Removed importers launchd agent."
             fi
             ;;
     esac
-    rm -f "$WRAPPER"
+    rm -f "$WRAPPER" "$IMPORTERS_WRAPPER"
     exit 0
 fi
 
@@ -136,13 +191,35 @@ fi
 case "$OS" in
 
 Linux)
-    CRON_CMD="${MINUTE} ${HOUR} * * * bash ${WRAPPER} >> ${VAULT_PATH}/_Scripts/organizer.log 2>&1 # ${CRON_TAG}"
-    ( crontab -l 2>/dev/null | grep -v "$CRON_TAG"; echo "$CRON_CMD" ) | crontab -
+    CRON_CMD="${MINUTE} ${HOUR} * * * bash ${WRAPPER} >> ${VAULT_PATH}/_Scripts/organizer.log 2>&1 # ${CRON_TAG_ORGANIZER}"
+    ( crontab -l 2>/dev/null | grep -v "$CRON_TAG_ORGANIZER"; echo "$CRON_CMD" ) | crontab -
 
     echo "Cron job installed:"
     echo "  Schedule: daily at $(printf '%02d:%02d' "$HOUR" "$MINUTE")"
     echo "  Provider: ${PROVIDER}"
     echo "  Command: ${CRON_CMD}"
+    echo ""
+
+    # Install importer cron if enabled
+    if [ "$ENABLE_IMPORTERS" = true ]; then
+        IMPORTER_CRON=""
+        IMPORTER_TAG="research-log-importers"
+
+        if [[ $IMPORTER_INTERVAL == *"h"* ]]; then
+            HOURS=${IMPORTER_INTERVAL%h}
+            IMPORTER_CRON="0 */$HOURS * * * cd $PROJECT_ROOT && $PYTHON scripts/chat_importers.py >> ${VAULT_PATH}/_Scripts/importers.log 2>&1 # ${IMPORTER_TAG}"
+        elif [[ $IMPORTER_INTERVAL == *"m"* ]]; then
+            MINUTES=${IMPORTER_INTERVAL%m}
+            IMPORTER_CRON="*/$MINUTES * * * * cd $PROJECT_ROOT && $PYTHON scripts/chat_importers.py >> ${VAULT_PATH}/_Scripts/importers.log 2>&1 # ${IMPORTER_TAG}"
+        fi
+
+        if [ -n "$IMPORTER_CRON" ]; then
+            ( crontab -l 2>/dev/null | grep -v "$IMPORTER_TAG"; echo "$IMPORTER_CRON" ) | crontab -
+            echo "✓ Installed chat importers cron job ($IMPORTER_INTERVAL)"
+            echo "  Logs: vault/_Scripts/importers.log"
+        fi
+    fi
+
     echo ""
     echo "Verify:  crontab -l | grep organizer"
     echo "Remove:  bash scripts/setup-organizer.sh --remove"
@@ -190,6 +267,55 @@ PLIST
     echo "  Provider: ${PROVIDER}"
     echo "  Plist: ${LAUNCHD_PLIST}"
     echo ""
+
+    # Install importer launchd agent if enabled
+    if [ "$ENABLE_IMPORTERS" = true ]; then
+        LAUNCHD_IMPORTERS_LABEL="com.research-log.importers"
+        LAUNCHD_IMPORTERS_PLIST="$HOME/Library/LaunchAgents/${LAUNCHD_IMPORTERS_LABEL}.plist"
+
+        [[ -f "$LAUNCHD_IMPORTERS_PLIST" ]] && launchctl unload "$LAUNCHD_IMPORTERS_PLIST" 2>/dev/null || true
+
+        # Calculate interval for StartInterval (in seconds)
+        INTERVAL_SECONDS=7200  # default 2h
+        if [[ $IMPORTER_INTERVAL == *"h"* ]]; then
+            HOURS=${IMPORTER_INTERVAL%h}
+            INTERVAL_SECONDS=$((HOURS * 3600))
+        elif [[ $IMPORTER_INTERVAL == *"m"* ]]; then
+            MINUTES=${IMPORTER_INTERVAL%m}
+            INTERVAL_SECONDS=$((MINUTES * 60))
+        fi
+
+        cat > "$LAUNCHD_IMPORTERS_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${LAUNCHD_IMPORTERS_LABEL}</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>${IMPORTERS_WRAPPER}</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>${INTERVAL_SECONDS}</integer>
+
+    <key>StandardOutPath</key>
+    <string>${VAULT_PATH}/_Scripts/importers.log</string>
+    <key>StandardErrorPath</key>
+    <string>${VAULT_PATH}/_Scripts/importers.log</string>
+</dict>
+</plist>
+PLIST
+
+        launchctl load "$LAUNCHD_IMPORTERS_PLIST"
+        echo "✓ Installed chat importers launchd agent ($IMPORTER_INTERVAL)"
+        echo "  Logs: vault/_Scripts/importers.log"
+        echo ""
+    fi
+
     echo "Verify:  launchctl list | grep research-log"
     echo "Remove:  bash scripts/setup-organizer.sh --remove"
     echo "Logs:    vault/_Scripts/organizer.log"

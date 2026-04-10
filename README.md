@@ -23,7 +23,9 @@ A team daily research logging system built on Obsidian. Collects structured dail
   - [Scheduled Reminders](#scheduled-reminders)
   - [Claude Code Hook](#claude-code-session-hook)
   - [Git Commit Hook](#git-commit-hook)
-  - [Browser Extension](#browser-extension-claude-web-chats)
+  - [Browser Extension (Claude Web Chats)](#browser-extension-claude-web-chats)
+  - [Browser Extension (Web Clipper)](#browser-extension-web-clipper)
+  - [Chat Importers Daemon](#chat-importers-daemon)
 - [Vault Structure](#vault-structure)
 - [Frontmatter Schema](#frontmatter-schema)
 - [Obsidian Setup](#obsidian-setup)
@@ -497,12 +499,83 @@ Exported chats land in `00-Inbox/` and the watcher files them to `10-LLM-Chats/`
 
 ---
 
+### Browser Extension (Web Clipper)
+
+Lightweight capture of web content (text selections, links, optional screenshots).
+
+**Install:**
+1. Open Chrome → `chrome://extensions/`
+2. Enable Developer mode
+3. Click "Load unpacked" → select the `extension/` folder
+4. Click the extension icon → click gear icon
+5. Set "Download Folder" to `<vault-path>/00-Inbox`
+6. Click "Save Settings"
+
+**Usage:**
+- Select text on any web page (or skip to capture full context)
+- Click extension icon → popup appears
+- (Optional) toggle "Include screenshot"
+- (Optional) add notes and tags
+- Click "Save to Research Log"
+- File lands in `00-Inbox/` → organizer files to `15-Web-Clips/`
+
+**Files:**
+- Extension source: `extension/`
+- Setup guide: `docs/extension-setup.md`
+
+---
+
+### Chat Importers Daemon
+
+Auto-collect chat histories from Claude CLI, Copilot, and other tools.
+
+**Install:**
+```bash
+bash scripts/setup-organizer.sh --enable-importers --importer-interval 2h
+```
+
+**How it works:**
+- Runs every N hours (configurable, default 2h)
+- Scans local storage for new chats from Claude CLI and Copilot
+- Converts each to markdown and writes to `00-Inbox/`
+- Existing organizer picks up and files to `10-LLM-Chats/`
+- State tracking (SQLite) prevents duplicates
+
+**Supported tools:**
+- Claude CLI (detects `~/.claude/chats/`)
+- Copilot (cross-platform: Windows, macOS, Linux)
+- Extensible: add ChatGPT, Gemini, etc.
+
+**Configuration:**
+- `--enable-importers` — Install the importers daemon
+- `--importer-interval` — How often to run: `30m`, `1h`, `2h`, `6h`, `12h`, `24h` (default: `2h`)
+
+**Manage:**
+```bash
+# View importer logs
+tail -f vault/_Scripts/importers.log
+
+# Re-run manually
+python3 scripts/chat_importers.py
+
+# Remove importers
+bash scripts/setup-organizer.sh --remove
+```
+
+**Files:**
+- Importers source: `scripts/chat_importers/`
+- Setup integration: `scripts/setup-organizer.sh`
+- Dev guide: `docs/importer-developer-guide.md`
+
+---
+
 ## Vault Structure
 
 ```
 vault/
 ├── 00-Inbox/           ← staging area — everything lands here first
 ├── 10-LLM-Chats/       ← Claude web chats (via browser extension)
+├── 15-Web-Clips/       ← web content captures (via web clipper)
 ├── 20-Code-Sessions/   ← Claude Code sessions + git commits
 ├── 30-Research/        ← papers, articles, PDF exports
 ├── 40-Experiments/     ← hypotheses, test logs, results
@@ -523,7 +596,8 @@ vault/
 | `experiment` | `40-Experiments/` | `log.sh`, manual |
 | `code-session` | `20-Code-Sessions/` | Claude Code hook, git hook |
 | `research` | `30-Research/` | Manual drop |
-| `llm-chat` | `10-LLM-Chats/` | Browser extension |
+| `llm-chat` | `10-LLM-Chats/` | Browser extension, chat importers |
+| `web-clip` | `15-Web-Clips/` | Web clipper extension |
 | `general` | `60-Permanent/` | Anything unclassified |
 
 ---
@@ -534,11 +608,14 @@ Every note in the vault has YAML frontmatter that makes it queryable:
 
 ```yaml
 ---
-type: daily-log                    # daily-log | journal | experiment | code-session | research | llm-chat | general
+type: daily-log                    # daily-log | journal | experiment | code-session | research | llm-chat | web-clip | general
 date: 2026-04-09                   # ISO date
 contributor: "alice"               # who wrote this
 summary: "Explored new approach"   # one-liner, max 120 chars
 status: "in-progress"              # for daily-logs and experiments (optional)
+tool: "claude-cli"                 # for importers: claude-cli, copilot, etc. (optional)
+source_id: "chat-id-123"           # unique ID from source tool (optional)
+url: "https://example.com"         # source URL for web clips (optional)
 tags:                              # for filtering and search
   - "daily-log"
   - "ml-pipeline"
