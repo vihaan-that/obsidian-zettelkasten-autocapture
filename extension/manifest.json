@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Research Log Web Clipper",
+  "version": "1.0.0",
+  "description": "Clip web content, text, and screenshots to your Research Log vault",
+  "permissions": [
+    "storage",
+    "scripting",
+    "downloads"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Research Log Web Clipper"
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js"
+  }
+}
